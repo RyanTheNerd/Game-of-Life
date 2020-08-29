@@ -9,12 +9,16 @@ class Cell {
     this.aliveFrames = 0;
     this.nextState = {};
   }
+  setAlive(state) {
+    if(state == false) this.aliveFrames = 0;
+    this.nextState.alive = state;
+  }
   tick() {  // Determine if cell will be alive in next tick of the game
     this.updateNeighborCount();
 
     if(this.state.alive) this.handleAlive();
 
-    else if(this.state.neighborCount == 3) this.nextState.alive = true;
+    else if(this.state.neighborCount == 3) this.setAlive(true);
     if(this.state.alive && 
        this.nextState.alive && 
        this.aliveFrames < 12
@@ -22,13 +26,13 @@ class Cell {
   }
   handleAlive() {
     // Underpopulation
-      if(this.state.neighborCount < 2) this.nextState.alive = false;
+      if(this.state.neighborCount < 2) this.setAlive(false);
 
     // Good population
-      else if(this.state.neighborCount < 4) this.nextState.alive = true;
+      else if(this.state.neighborCount < 4) this.setAlive(true);
 
     // Overpopulation
-      else this.nextState.alive = false;
+      else this.setAlive(false);
 
   }
   useNextState() {
@@ -99,6 +103,7 @@ class CellMatrix {
   addSeed() {
     this.cells.forEach((cell) => {
       cell.state.alive = Math.random() > 0.5;
+      cell.aliveFrames = 0;
     });
   }
 }
@@ -106,8 +111,9 @@ class CellMatrix {
 class MatrixViewPort {
   constructor(canvas, cellMatrix, width, height) {
     this.colorCode = [...Array(8).keys()].reverse().map((i) => {
-      return `hsl(${Math.floor((i * 360) / 8)}, ${i/8 * 100}%, ${Math.floor(i/8 * 100)}%)`;
+      return `hsl(${Math.floor((i + 1) * (240 / 7))}, ${((i + 1)/8 * 75) + 25}%, ${Math.floor((i + 1)/8 * 50 + 25)}%)`;
     });
+    console.log(this.colorCode);
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.width = width;
