@@ -10,7 +10,6 @@ class Cell {
     this.nextState = {};
   }
   setAlive(state) {
-    if(state == false) this.aliveFrames = 0;
     this.nextState.alive = state;
   }
   tick() {  // Determine if cell will be alive in next tick of the game
@@ -19,10 +18,7 @@ class Cell {
     if(this.state.alive) this.handleAlive();
 
     else if(this.state.neighborCount == 3) this.setAlive(true);
-    if(this.state.alive && 
-       this.nextState.alive && 
-       this.aliveFrames < 12
-       ) this.aliveFrames++;
+
   }
   handleAlive() {
     // Underpopulation
@@ -37,7 +33,11 @@ class Cell {
   }
   useNextState() {
     Object.assign(this.state, this.nextState);
-    this.nextState = {};
+    this.nextState = {alive: false};
+    if(this.state.alive == false) this.aliveFrames = 0;
+    else if( this.state.alive && 
+       this.aliveFrames < 12
+       ) this.aliveFrames++;
   }
   updateNeighborCount() {
     this.state.neighborCount = 0;
@@ -56,8 +56,6 @@ class CellMatrix {
     this.width = width;
     this.height = height;
     this.aliveCount = 0;
-    this.entropy = 0;
-    this.averageEntropy = null;
     
     // Populate matrix with cells
     for(let y = 0; y < this.height; y++) {
@@ -88,21 +86,18 @@ class CellMatrix {
     
   }
   tick() {
-    this.entropy = 0;
     this.aliveCount = 0;
-    this.cells.forEach((cell) => cell.tick());
     this.cells.forEach((cell) => {
-      cell.useNextState();
-      this.entropy += cell.aliveFrames;
       if(cell.state.alive) {
         this.aliveCount++;
       }
+      cell.useNextState();
     });
-    this.averageEntropy = this.entropy / this.aliveCount;
+    this.cells.forEach((cell) => cell.tick());
   }
   addSeed() {
     this.cells.forEach((cell) => {
-      cell.state.alive = Math.random() > 0.5;
+      cell.nextState.alive = Math.random() > 0.5;
       cell.aliveFrames = 0;
     });
   }
@@ -110,26 +105,49 @@ class CellMatrix {
 
 class MatrixViewPort {
   constructor(canvas, cellMatrix, width, height) {
-    this.colorCode = [...Array(8).keys()].reverse().map((i) => {
-      return `hsl(${Math.floor((i + 1) * (240 / 7))}, ${((i + 1)/8 * 75) + 25}%, ${Math.floor((i + 1)/8 * 50 + 25)}%)`;
-    });
-    console.log(this.colorCode);
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.width = width;
     this.height = height;
     this.cellMatrix = cellMatrix;
     this.resize();
-    window.addEventListener('resize', this.resize.bind(this));
   }
-  draw() {
+  draw(timePassed) {
+    this.ctx.globalAlpha = 1;
     this.ctx.fillStyle = '#000000';
     this.ctx.fillRect(0, 0,this.canvas.width, this.canvas.height);
+
+    let cellState;
     this.cellMatrix.cells.forEach((cell) => {
-      if(cell.state.alive == false) {
-        return;
+      // fade out
+      if(cell.nextState.alive == false && cell.state.alive == true) {
+        this.ctx.globalAlpha = 1 - timePassed;
+        cellState = "dying";
       }
-      this.ctx.fillStyle = this.colorCode[cell.aliveFrames > this.colorCode.length ? this.colorCode.length - 1 : cell.aliveFrames];
+      // fade in
+      else if(cell.nextState.alive == true && cell.state.alive == false) {
+        this.ctx.globalAlpha = timePassed;
+        cellState = "reviving";
+      }
+      // alive
+      else if(cell.nextState.alive == true && cell.state.alive == true) {
+        this.ctx.globalAlpha = 1;
+        cellState = "alive";
+      }
+      else return;
+
+      let colorVal;
+      if(cellState == "reviving") {
+        colorVal = timePassed;
+      }
+      else if(cellState == "dying") {
+        colorVal = 1 - timePassed;
+      }
+      else {
+        colorVal = 1;
+      }
+      let hue = 240 - ((cell.aliveFrames * (360 / 12)) + (timePassed * (360 / 12))) * 2 / 3;
+      this.ctx.fillStyle = `hsl(${hue}, ${colorVal * 100}%, ${colorVal * 50}%)`;
       let x = cell.position[0] * this.cellWidth;
       let y = cell.position[1] * this.cellHeight;
       this.ctx.fillRect(x, y, this.cellWidth, this.cellHeight); 
@@ -187,32 +205,28 @@ class GameOfLife {
     // Canvas stuff
     this.canvas = document.createElement('canvas');
     document.body.appendChild(this.canvas);
-    this.canvas.addEventListener('click', function() {this.matrix.addSeed()}.bind(this));
-    document.body.addEventListener('keydown', function(e) {
-      if(e.code == "ArrowUp" && this.skippedFrames > 0) {
-        this.skippedFrames--;
-      }
-      else if(e.code == "ArrowDown" && this.skippedFrames < 10) {
-        this.skippedFrames++;
-      }
-      this.currentFrame = 0;
-    }.bind(this));
 
-    this.skippedFrames = 5;
+    this.speed = 2;
     this.currentFrame = 0;
-
+    this.timePassed = 0;
     this.matrix = new CellMatrix(this.width, this.height);
     this.viewPort = new MatrixViewPort(this.canvas, this.matrix, this.width, this.height);
+    window.addEventListener('resize', () => this.viewPort.resize());
+    this.canvas.addEventListener('click', function() {this.matrix.addSeed()}.bind(this));
+    
+    window.addEventListener('wheel', (ev) => {
+      if(ev.deltaY > 0 && this.speed < 100) this.speed += 0.1;
+      else if(ev.deltaY < 0 && this.speed > 0) this.speed -= 0.1;
+    });
   }
   tick() {
-    if(this.skippedFrames == this.currentFrame) {
+    this.timePassed += this.speed / 100;
+    this.currentFrame = Math.floor(this.timePassed);
+    this.timePassed %= 1;
+    if(this.currentFrame == 1) {
       this.matrix.tick();
-      this.viewPort.draw();
-      this.currentFrame = 0;
     }
-    else {
-      this.currentFrame++;
-    }
+    this.viewPort.draw(this.timePassed);
     window.requestAnimationFrame(this.tick.bind(this));
   }
   
