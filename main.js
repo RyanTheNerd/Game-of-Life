@@ -206,7 +206,7 @@ class GameOfLife {
     this.canvas = document.createElement('canvas');
     document.body.appendChild(this.canvas);
 
-    this.speed = 2;
+    this.speed = 10;
     this.currentFrame = 0;
     this.timePassed = 0;
     this.matrix = new CellMatrix(this.width, this.height);
